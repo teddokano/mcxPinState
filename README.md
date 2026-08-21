@@ -64,9 +64,10 @@ maintenance.
 ## Status
 
 Functional and verified on real hardware (both FRDM-MCXA153 and
-FRDM-MCXN947) -- ownership tracking (conflict detection) and the MUX
-expectation cross-check. Development turned up two real bugs in
-mcx-arduino-core along the way, both fixed there:
+FRDM-MCXN947) -- ownership tracking (conflict detection), the MUX
+expectation cross-check, and IBE/open-drain/pull-resistor reporting.
+Development turned up three real bugs in mcx-arduino-core along the way,
+all fixed and confirmed on hardware there:
 
 - A false-positive CONFLICT on SPI's CS pin (its internal bookkeeping
   object versus a sketch's own `pinMode(SS, ...)`)
