@@ -1,10 +1,11 @@
 /** mcxPinState: multi-peripheral pin ownership dump
  *
  *  Brings up several peripherals at once (GPIO, Wire, SPI) and prints the
- *  resulting pin-ownership table. Each pin should show exactly one owner
- *  and no "*** CONFLICT ***" markers -- if one appears, two live objects
- *  are fighting over the same physical pin (the bug class this library
- *  exists to catch; see mcx-arduino-core's own session history for a real
+ *  resulting two-table pin/instance dump. Every claimed pin's Status
+ *  column should read "OK", and Wire/SPI should each show begun()=yes in
+ *  the second table -- a "CONFLICT" anywhere means two live objects are
+ *  fighting over the same physical pin (the bug class this library exists
+ *  to catch; see mcx-arduino-core's own session history for a real
  *  example: Serial1 and a sketch-declared I3C object silently re-muxing
  *  the same MikroBus pins on FRDM-MCXN947).
  */

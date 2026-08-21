@@ -11,8 +11,7 @@
  *  Wiring: none required. This only checks pin ownership/MUX state, not
  *  actual peripheral function -- no loopback jumpers needed.
  *
- *  Expect: no "*** CONFLICT ***" or "*** MISMATCH ***" markers anywhere in
- *  the printed table.
+ *  Expect: no "CONFLICT" or "MISMATCH" Status anywhere in either table.
  */
 
 #include <Arduino.h>
