@@ -6,7 +6,8 @@ physical pins each one holds, flagging pins claimed by more than one
 instance at once -- and, for pins with exactly one owner, cross-checking
 that pin's live PORT MUX register against the ALT value that owner
 actually requested, flagging a mismatch if something re-muxed it
-afterward.
+afterward. Also reports each pin's input-buffer-enable, open-drain, and
+pull-resistor state, straight off the live PCR register.
 
 Depends on mcx-arduino-core's internal pin representation directly — this
 library is not usable with any other Arduino core.
@@ -38,10 +39,12 @@ void setup() {
   Wire.begin();
   SPI.begin();
 
-  pins.print();   // one line per claimed pin: "*** CONFLICT ***" if more
-                   // than one live object holds it, or "*** MISMATCH
-                   // (wanted ALTn) ***" if its single owner's requested
-                   // ALT doesn't match what's actually in the register
+  pins.print();   // e.g. "Pin 16 [ALT3 IBE]: Wire" -- one line per
+                   // claimed pin, its live ALT and flags (IBE/OD/PD/PU),
+                   // and "*** CONFLICT ***" if more than one live object
+                   // holds it, or "*** MISMATCH (wanted ALTn) ***" if its
+                   // single owner's requested ALT doesn't match what's
+                   // actually in the register
 }
 
 void loop() {
@@ -61,7 +64,7 @@ maintenance.
 ## Status
 
 Functional and verified on real hardware (both FRDM-MCXA153 and
-FRDM-MCXN947) -- both ownership tracking (conflict detection) and the MUX
+FRDM-MCXN947) -- ownership tracking (conflict detection) and the MUX
 expectation cross-check. Development turned up two real bugs in
 mcx-arduino-core along the way, both fixed there:
 
@@ -71,3 +74,10 @@ mcx-arduino-core along the way, both fixed there:
   building it as a plain `DigitalInOut` first (e.g. I2C/I3C's SDA/SCL) --
   `DigitalInOut::pin_mux()` wasn't keeping the registry's expectation in
   sync with the ALT it had just set
+
+The IBE/open-drain/pull-resistor reporting is compile-verified only so
+far -- not yet checked on real hardware. (While adding it,
+mcx-arduino-core's `PORT_SetPinPullUpDown()` turned out to have its own
+pre-existing bug -- its `enable`/`logic` parameters land in the PS/PE
+fields swapped from what its own doc comment says -- documented at the
+read site but not yet fixed.)

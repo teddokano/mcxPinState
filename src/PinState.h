@@ -48,13 +48,19 @@ public:
 
 	/** Print the current pin-ownership table: one line per physical pin
 	 *  currently claimed by at least one live object, in the form
-	 *  `Pin <n> [ALT<x>]: <owner(s)>`, followed by:
+	 *  `Pin <n> [ALT<x> <flags>]: <owner(s)>`, followed by:
 	 *    - "*** CONFLICT ***" if more than one owner claims the pin, or
 	 *    - "*** MISMATCH (wanted ALT<y>) ***" if there's exactly one
 	 *      owner but the pin's live PORT MUX register doesn't match the
 	 *      ALT value that owner registered wanting
 	 *  Neither marker appears when the pin has exactly one owner and the
 	 *  live register matches what that owner expects.
+	 *
+	 *  `<flags>` is a subset of {"IBE", "OD", "PD", "PU"} -- present only
+	 *  when that bit is actually set in the pin's live PCR register:
+	 *  input buffer enabled, open-drain output, pull-down, pull-up
+	 *  (PD/PU are mutually exclusive; neither appears if no pull is
+	 *  enabled).
 	 * @param out stream to print to, defaults to Serial
 	 */
 	void print( Print &out = Serial ) const;

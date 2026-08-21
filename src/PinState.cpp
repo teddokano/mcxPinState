@@ -125,12 +125,23 @@ void PinState::print( Print &out ) const
 			out.print( "Pin " );
 			out.print( pin );
 
-			uint8_t	actual_mux	= pin_registry_read_mux( pin );
+			PinPcrInfo	pcr			= pin_registry_read_pcr( pin );
+			uint8_t		actual_mux	= pcr.mux;
 
 			if ( actual_mux != 0xFF )
 			{
 				out.print( " [ALT" );
 				out.print( actual_mux );
+
+				if ( pcr.ibe )
+					out.print( " IBE" );
+				if ( pcr.ode )
+					out.print( " OD" );
+				if ( pcr.pull == 1 )
+					out.print( " PD" );
+				else if ( pcr.pull == 2 )
+					out.print( " PU" );
+
 				out.print( "]" );
 			}
 
