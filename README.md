@@ -3,7 +3,10 @@
 Debug utility for [mcx-arduino-core](https://github.com/teddokano/mcx-arduino-core).
 Lists which r01lib peripheral/GPIO instances are currently alive and which
 physical pins each one holds, flagging pins claimed by more than one
-instance at once.
+instance at once -- and, for pins with exactly one owner, cross-checking
+that pin's live PORT MUX register against the ALT value that owner
+actually requested, flagging a mismatch if something re-muxed it
+afterward.
 
 Depends on mcx-arduino-core's internal pin representation directly — this
 library is not usable with any other Arduino core.
@@ -35,8 +38,10 @@ void setup() {
   Wire.begin();
   SPI.begin();
 
-  pins.print();   // one line per claimed pin; "*** CONFLICT ***" if
-                   // more than one live object holds the same pin
+  pins.print();   // one line per claimed pin: "*** CONFLICT ***" if more
+                   // than one live object holds it, or "*** MISMATCH
+                   // (wanted ALTn) ***" if its single owner's requested
+                   // ALT doesn't match what's actually in the register
 }
 
 void loop() {
@@ -55,10 +60,10 @@ maintenance.
 
 ## Status
 
-Functional and verified on real hardware (both FRDM-MCXA153 and
-FRDM-MCXN947), including a real false-positive it caught and mcx-arduino-
-core then fixed (SPI's internal CS bookkeeping object versus a sketch's
-own `pinMode(SS, ...)`).
-
-Not yet implemented: cross-checking each owner's actual PORT mux register
-against the ALT value it expects.
+Functional, both ownership tracking (conflict detection) and the MUX
+expectation cross-check. Ownership tracking has been verified on real
+hardware (both FRDM-MCXA153 and FRDM-MCXN947), including a real false-
+positive it caught and mcx-arduino-core then fixed (SPI's internal CS
+bookkeeping object versus a sketch's own `pinMode(SS, ...)`). The MUX
+cross-check itself is compile-verified only so far -- not yet exercised
+on real hardware.

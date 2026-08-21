@@ -18,6 +18,7 @@ struct Entry
 	const char	*name					= nullptr;
 	uint8_t		pins[ MAX_PINS_EACH ]	= {};
 	uint8_t		count					= 0;
+	uint8_t		wanted_mux				= 0;
 	bool		in_use					= false;
 };
 
@@ -31,7 +32,7 @@ Entry	registry[ MAX_ENTRIES ];
 // definitions) link in at all.
 extern "C" {
 
-void pin_registry_note( const void *owner, const char *owner_name, const uint8_t *pins, uint8_t pin_count )
+void pin_registry_note( const void *owner, const char *owner_name, const uint8_t *pins, uint8_t pin_count, uint8_t wanted_mux )
 {
 	Entry	*slot	= nullptr;
 
@@ -63,9 +64,10 @@ void pin_registry_note( const void *owner, const char *owner_name, const uint8_t
 	if ( !slot )
 		return;
 
-	slot->owner	= owner;
-	slot->name	= owner_name;
-	slot->count	= ( pin_count > MAX_PINS_EACH ) ? MAX_PINS_EACH : pin_count;
+	slot->owner			= owner;
+	slot->name			= owner_name;
+	slot->count			= ( pin_count > MAX_PINS_EACH ) ? MAX_PINS_EACH : pin_count;
+	slot->wanted_mux	= wanted_mux;
 
 	for ( uint8_t i = 0; i < slot->count; i++ )
 		slot->pins[ i ]	= pins[ i ];
@@ -122,9 +124,20 @@ void PinState::print( Print &out ) const
 
 			out.print( "Pin " );
 			out.print( pin );
+
+			uint8_t	actual_mux	= pin_registry_read_mux( pin );
+
+			if ( actual_mux != 0xFF )
+			{
+				out.print( " [ALT" );
+				out.print( actual_mux );
+				out.print( "]" );
+			}
+
 			out.print( ": " );
 
-			int	owners	= 0;
+			int		owners			= 0;
+			uint8_t	single_wanted	= 0;
 
 			for ( const Entry &e2 : registry )
 			{
@@ -138,6 +151,7 @@ void PinState::print( Print &out ) const
 						if ( owners > 0 )
 							out.print( ", " );
 						out.print( e2.name );
+						single_wanted	= e2.wanted_mux;
 						owners++;
 						break;
 					}
@@ -145,7 +159,15 @@ void PinState::print( Print &out ) const
 			}
 
 			if ( owners > 1 )
+			{
 				out.print( "  *** CONFLICT ***" );
+			}
+			else if ( actual_mux != 0xFF && actual_mux != single_wanted )
+			{
+				out.print( "  *** MISMATCH (wanted ALT" );
+				out.print( single_wanted );
+				out.print( ") ***" );
+			}
 
 			out.println();
 		}

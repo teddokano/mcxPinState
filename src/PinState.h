@@ -12,7 +12,14 @@
 /** Debug utility for mcx-arduino-core: reports which r01lib
  *  peripheral/GPIO objects are currently alive and which physical pins
  *  each one holds, flagging any pin claimed by more than one object at
- *  once.
+ *  once. Also cross-checks the pin's actual, currently-live PORT MUX
+ *  (ALT) register value against what its (sole) owner says it wanted,
+ *  flagging a mismatch -- catching cases where a pin was correctly
+ *  claimed at some point but then silently re-muxed to something else
+ *  afterward (a real bug this library's own development turned up in
+ *  mcx-arduino-core: Serial1's constructor re-muxing I3C's already-
+ *  claimed pins on FRDM-MCXN947, well after I3C's own constructor had
+ *  already set them and considered the job done).
  *
  *  Depends directly on mcx-arduino-core's internal pin representation --
  *  not usable with any other Arduino core.
@@ -40,9 +47,14 @@ public:
 	PinState() = default;
 
 	/** Print the current pin-ownership table: one line per physical pin
-	 *  currently claimed by at least one live object, listing every
-	 *  owner's name, with "*** CONFLICT ***" appended when more than one
-	 *  owner claims the same pin.
+	 *  currently claimed by at least one live object, in the form
+	 *  `Pin <n> [ALT<x>]: <owner(s)>`, followed by:
+	 *    - "*** CONFLICT ***" if more than one owner claims the pin, or
+	 *    - "*** MISMATCH (wanted ALT<y>) ***" if there's exactly one
+	 *      owner but the pin's live PORT MUX register doesn't match the
+	 *      ALT value that owner registered wanting
+	 *  Neither marker appears when the pin has exactly one owner and the
+	 *  live register matches what that owner expects.
 	 * @param out stream to print to, defaults to Serial
 	 */
 	void print( Print &out = Serial ) const;
