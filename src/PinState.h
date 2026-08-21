@@ -35,32 +35,38 @@
  *  starts recording ownership. Without a PinState instance, none of that
  *  code is even linked in.
  *
- *  Pins are reported as mcx-arduino-core's raw internal pin numbers (the
- *  same values io.h's per-chip pin enum assigns), not symbolic names like
- *  "D18" or "P1_16" -- resolving those would mean this library keeping
- *  its own per-board name table in sync with mcx-arduino-core's, which
- *  defeats the purpose of not needing board-specific maintenance here.
+ *  Pins are reported by their physical name ("P1_17" style), synthesized
+ *  from data mcx-arduino-core's io.cpp already keeps for itself (no name
+ *  string table added there -- see pin_registry_pin_name()'s own comment),
+ *  plus the pin's Arduino-level alias in parentheses when it has one
+ *  (e.g. "P1_17 (MB_RX)") -- looked up against mcx-arduino-core's own
+ *  arduino_pin_by_number[] so the *values* can never drift, from a name
+ *  list kept in this library and checked for length against that array at
+ *  compile time (see PinState.cpp). That keeps the string-table cost
+ *  entirely opt-in: paid only by sketches that construct a PinState, never
+ *  added to mcx-arduino-core's own footprint.
  */
 class PinState
 {
 public:
 	PinState() = default;
 
-	/** Print the current pin-ownership table: one line per physical pin
-	 *  currently claimed by at least one live object, in the form
-	 *  `Pin <n> [ALT<x> <flags>]: <owner(s)>`, followed by:
-	 *    - "*** CONFLICT ***" if more than one owner claims the pin, or
-	 *    - "*** MISMATCH (wanted ALT<y>) ***" if there's exactly one
-	 *      owner but the pin's live PORT MUX register doesn't match the
-	 *      ALT value that owner registered wanting
-	 *  Neither marker appears when the pin has exactly one owner and the
-	 *  live register matches what that owner expects.
+	/** Print a table with one row per *named* pin (every raw pin that
+	 *  appears in mcx-arduino-core's arduino_pin_by_number[], i.e. has at
+	 *  least one Arduino-level alias) -- not just pins currently claimed
+	 *  by a live object. Pins sharing one physical pin (e.g. D10/SPI_CS/
+	 *  ARD_CS) are grouped into a single row, their names comma-joined.
 	 *
-	 *  `<flags>` is a subset of {"IBE", "OD", "PD", "PU"} -- present only
-	 *  when that bit is actually set in the pin's live PCR register:
-	 *  input buffer enabled, open-drain output, pull-down, pull-up
-	 *  (PD/PU are mutually exclusive; neither appears if no pull is
-	 *  enabled).
+	 *  Columns: Name(s), physical Pin name, live MUX/IBE/ODE/Pull register
+	 *  state (all "-" if nothing currently owns the pin), Owner(s)
+	 *  (comma-joined if more than one), and Status:
+	 *    - "-" if no live object currently claims the pin
+	 *    - "OK" if exactly one owner and the live MUX matches what it
+	 *      requested
+	 *    - "CONFLICT" if more than one live owner claims the pin
+	 *    - "MISMATCH" if there's exactly one owner but the live MUX
+	 *      register doesn't match the ALT value that owner requested
+	 *      (something re-muxed the pin out from under its owner)
 	 * @param out stream to print to, defaults to Serial
 	 */
 	void print( Print &out = Serial ) const;
