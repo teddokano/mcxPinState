@@ -82,3 +82,11 @@ all fixed and confirmed on hardware there:
   `pinMode(pin, INPUT_PULLDOWN)` silently left the pin with no pull
   enabled at all (`INPUT_PULLUP` happened to still work, since its
   enable=1/logic=1 combination is symmetric either way round)
+- A false-positive MISMATCH on I3C's SDA/SCL pins, found with
+  `examples/CombinedPeripheralsAudit`: `I3C`'s constructor declared local
+  `DigitalInOut` variables shadowing the same-named, persistent members it
+  inherits (privately) from `I2C`, so the pins it actually configured were
+  throwaway objects gone by the time the registry got read. The hardware
+  itself was always configured correctly (PORT_PCR is per-pin, not
+  per-object) -- fixed by making the inherited members accessible and
+  muxing those directly instead of shadowing them
