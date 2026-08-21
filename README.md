@@ -18,6 +18,47 @@ Constructing a `PinState` object anywhere in a sketch pulls in this
 library's strong override of those hooks, along with the actual pin
 registry and reporting code. Without that object, none of it links in.
 
+## Usage
+
+```cpp
+#include <Arduino.h>
+#include <PinState.h>
+
+PinState pins;
+
+void setup() {
+  Serial.begin(115200);
+  while (!Serial)
+    ;
+
+  pinMode(D2, OUTPUT);
+  Wire.begin();
+  SPI.begin();
+
+  pins.print();   // one line per claimed pin; "*** CONFLICT ***" if
+                   // more than one live object holds the same pin
+}
+
+void loop() {
+}
+```
+
+See `examples/MultiPeripheralDump` for a fuller example, and
+`examples/ConflictDemo` for a deterministic, wiring-free demonstration of
+the conflict flag.
+
+Pins are reported as mcx-arduino-core's raw internal pin numbers (io.h's
+per-chip pin enum), not symbolic names like "D18" -- resolving those would
+mean keeping a per-board name table in sync with mcx-arduino-core's own,
+which defeats the point of this library needing zero board-specific
+maintenance.
+
 ## Status
 
-Design in progress -- not yet functional.
+Functional and verified on real hardware (both FRDM-MCXA153 and
+FRDM-MCXN947), including a real false-positive it caught and mcx-arduino-
+core then fixed (SPI's internal CS bookkeeping object versus a sketch's
+own `pinMode(SS, ...)`).
+
+Not yet implemented: cross-checking each owner's actual PORT mux register
+against the ALT value it expects.
