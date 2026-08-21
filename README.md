@@ -1,7 +1,9 @@
 # mcxPinState
 
 Debug utility for [mcx-arduino-core](https://github.com/teddokano/mcx-arduino-core).
-Prints a table, one row per named pin (every pin with at least one
+Prints two tables.
+
+The first has one row per named pin (every pin with at least one
 Arduino-level alias -- D0, A2, MB_SDA, etc; pins sharing one physical pin,
 like D10/SPI_CS/ARD_CS, are grouped into a single row), showing which
 r01lib peripheral/GPIO instance currently holds it, its live PORT MUX
@@ -11,6 +13,11 @@ object claiming the same pin (CONFLICT), or a pin whose live ALT register
 doesn't match what its sole owner actually requested (MISMATCH -- catches
 something having silently re-muxed the pin out from under its owner after
 the fact).
+
+The second has one row per mcx-arduino-core well-known global instance
+(`Wire`, `Wire1`, `Wire2` on FRDM-MCXN947, `SPI`, `SPI1`, `Serial`,
+`Serial1`), showing whether it's currently begun, which of its own pins
+it actually holds, and the same CONFLICT flagging as the first table.
 
 Depends on mcx-arduino-core's internal pin representation directly — this
 library is not usable with any other Arduino core.
@@ -48,9 +55,19 @@ void setup() {
   // --------------------------------------------------------------------------------
   // D2                         P0_29    0    ON   -    -     -            -
   // D10, SPI_CS, ARD_CS        P0_27    0    ON   -    -     -            -
-  // D18                        P4_0     4    ON   -    -     Wire         OK
-  // D19                        P4_1     4    ON   -    -     Wire         OK
+  // D18                        P4_0     4    ON   -    -     GPIO         OK
+  // D19                        P4_1     4    ON   -    -     GPIO         OK
   // ...
+  //
+  // === Peripheral instance state ===
+  // Instance     begun()?  Holds pins                       Status
+  // ----------------------------------------------------------------------
+  // Wire         yes       P4_0, P4_1                       OK
+  // Wire1        no        -                                -
+  // SPI          yes       P0_24, P0_26, P0_25              OK
+  // SPI1         no        -                                -
+  // Serial       yes       P0_3, P0_2                       OK
+  // Serial1      no        -                                -
 }
 
 void loop() {
@@ -82,14 +99,26 @@ all fixed to io.h's `DISABLED_PIN` sentinel) are left out of the table
 entirely, rather than grouped into one misleading row that looks like
 they share a physical pin.
 
-`Owner` currently shows the *class* of object holding a pin ("GPIO",
-"Serial", "SPI", "AnalogIn", "PwmOut"), not which specific global instance
-(e.g. `Wire` vs `Wire1` both show as owned by an `I2C`-family
-`DigitalInOut`, reported generically as "GPIO") -- telling those apart
-would mean this library also keeping a list of mcx-arduino-core's
-well-known global instances (`Wire`, `Wire1`, `Wire2`, `SPI`, `SPI1`,
-`Serial`, `Serial1`) to match registry entries against by address; not
-implemented yet.
+The first table's `Owner` column shows the *class* of object holding a
+pin ("GPIO", "Serial", "SPI", "AnalogIn", "PwmOut"), not which specific
+global instance -- `Wire` and `Wire1` both show as "GPIO" (their SDA/SCL
+are plain `DigitalInOut` objects under the hood, same as any
+`pinMode()`'d pin), and `SPI`/`SPI1` both show as "SPI". The second table
+is what actually tells specific instances apart, by checking each
+well-known global's own known pin(s) against the registry -- not by
+address (which would need those pin-owning `DigitalInOut` objects to
+register under the wrapping `TwoWire`/`SPIClass`/`SerialClass`
+instance's own identity, which they don't), but by *pin presence with a
+real peripheral ALT*: a pin only counts as held by e.g. `SPI` if its
+registry entry's owner name matches ("SPI"/"Serial" are unambiguous
+class-level labels; the "GPIO"-labelled I2C-family instances additionally
+require the pin's registered ALT to be non-zero, since a plain
+`pinMode()`'d pin -- always registered at ALT0 -- would otherwise look
+identical to a real `Wire.begin()`). This was tightened after real
+hardware testing showed `SPI` reporting PARTIAL just because
+`tone(D13, ...)` was toggling D13 as plain GPIO -- D13 happens to be the
+same physical pin as `SPI`'s default SCLK, entirely unrelated to whether
+`SPI.begin()` was ever called.
 
 ## Status
 
@@ -121,5 +150,23 @@ all fixed and confirmed on hardware there:
   per-object) -- fixed by making the inherited members accessible and
   muxing those directly instead of shadowing them
 
-Physical-name and Arduino-alias display (see above) is also confirmed on
-real hardware on both boards.
+Physical-name and Arduino-alias display, the full named-pin table (every
+named pin, claimed or not, with same-pin aliases grouped into one row),
+and the "Peripheral instance state" table are all confirmed on real
+hardware on both boards. Two more issues turned up building those, both
+entirely within this library (no mcx-arduino-core changes involved) and
+fixed:
+
+- Aliases that mcx-arduino-core defines but that don't correspond to a
+  real pin on the current board (all fixed to io.h's `DISABLED_PIN`
+  sentinel, e.g. FRDM-MCXN947's `A0`/`A1`/`MB_AN`) were being grouped into
+  one misleading row that looked like they shared a physical pin --
+  they're excluded from the table entirely now
+- The instance table's `SPI` row showed PARTIAL just because
+  `tone(D13, ...)` toggled D13 (the same physical pin as `SPI`'s default
+  SCLK) as plain GPIO -- checking pin presence alone couldn't tell that
+  apart from a real `SPI.begin()`. Fixed by also requiring the pin's
+  registered owner name to match ("SPI"/"Serial" already can't collide
+  with anything else; the "GPIO"-labelled I2C-family instances
+  additionally require a non-zero registered ALT, since a plain
+  `pinMode()`'d pin is always registered at ALT0)

@@ -5,6 +5,7 @@
  */
 
 #include	<cstdio>
+#include	<cstring>
 #include	"PinState.h"
 #include	"pin_registry.h"
 
@@ -90,6 +91,143 @@ struct Entry
 };
 
 Entry	registry[ MAX_ENTRIES ];
+
+// How many live registry entries currently claim raw_pin, with their
+// names comma-joined into buf ("-" if none). If exactly one owner,
+// *wanted_mux_out is set to that owner's requested ALT (untouched
+// otherwise -- callers that only care about the single-owner case should
+// check the returned count first).
+int owners_of( uint8_t pin, char *buf, uint8_t buf_size, uint8_t *wanted_mux_out )
+{
+	int		owners	= 0;
+	uint8_t	pos		= 0;
+
+	buf[ 0 ]	= '\0';
+
+	for ( const Entry &e : registry )
+	{
+		if ( !e.in_use )
+			continue;
+
+		for ( uint8_t j = 0; j < e.count; j++ )
+		{
+			if ( e.pins[ j ] != pin )
+				continue;
+
+			int	n	= snprintf( buf + pos, buf_size - pos, "%s%s", (owners > 0) ? ", " : "", e.name );
+
+			if ( n > 0 )
+				pos	+= (uint8_t)n;
+
+			if ( wanted_mux_out )
+				*wanted_mux_out	= e.wanted_mux;
+
+			owners++;
+			break;
+		}
+	}
+
+	if ( 0 == owners )
+		snprintf( buf, buf_size, "-" );
+
+	return owners;
+}
+
+// Whether raw_pin is currently claimed specifically *for* expected_name's
+// peripheral function -- not just claimed by anything.
+//
+// Checking registry ownership by pin alone isn't enough: a good many of
+// these known-instance pins double as an ordinary D-numbered pin (e.g.
+// SPI's default SCLK is also D13), so something as unrelated as
+// `tone(D13, ...)` toggling it as plain GPIO would otherwise read as
+// "SPI has claimed its SCLK pin" (found via real hardware testing:
+// CombinedPeripheralsAudit's tone() call on D13 made SPI show up as
+// PARTIAL even though SPI.begin() was never called). Matching
+// owner_name rules out unrelated owners for SPI/Serial (which register
+// under those specific class-level labels), but not for the I2C-family
+// instances (Wire/Wire1/Wire2's SDA/SCL are DigitalInOut objects, so
+// they -- like any plain pinMode() pin -- register generically as
+// "GPIO"; see owners_of()'s own comment). wanted_mux != 0 closes that
+// gap: DigitalInOut's constructor always registers a fresh plain-GPIO
+// pin with wanted_mux == 0 (ALT0, this whole core's universal "plain
+// GPIO" convention), while I2C/I3C's begin() re-muxes its SDA/SCL to a
+// real peripheral ALT and updates the registry to match (see
+// DigitalInOut::pin_mux()'s own history). So requiring both together is
+// what actually distinguishes "this specific peripheral is really
+// live" from "something else happens to be touching the same pin".
+bool owned_by( uint8_t pin, const char *expected_name )
+{
+	for ( const Entry &e : registry )
+	{
+		if ( !e.in_use )
+			continue;
+
+		for ( uint8_t j = 0; j < e.count; j++ )
+			if ( (e.pins[ j ] == pin) && (0 == strcmp( e.name, expected_name )) && (e.wanted_mux != 0) )
+				return true;
+	}
+
+	return false;
+}
+
+// mcx-arduino-core's well-known global peripheral instances, identified
+// here only by the pin(s) each one is defined to use -- not by address,
+// since telling e.g. Wire and Wire1 apart by matching a registry entry's
+// owner pointer against &Wire/&Wire1 would need those pin-owning
+// DigitalInOut objects to register under the wrapping TwoWire/SPIClass/
+// SerialClass instance's own `this`, which they don't (I2C/I3C's SDA/SCL
+// register under their own DigitalInOut's `this`, generically as "GPIO";
+// see this library's own development history in the README for how that
+// was found). Checking "are this instance's own known pins present in
+// the registry at all" sidesteps that entirely, and needs no changes on
+// the mcx-arduino-core side.
+//
+// Pin values: the four *_SDA/*_SCL macros are fixed to raw pin values
+// unconditionally by arduino_io.h (deliberately, precisely to close off
+// this kind of "which value does this name mean right now" question --
+// see mcx-arduino-core's own history around the r01lib_I3C SOS-panic
+// bug), so they're used directly. Everything else here went through the
+// normal ArduinoPinNum renumbering, so arduino_pin_by_number[] converts
+// it back to the raw value pin_registry_note() actually deals in, same
+// as names_for() above.
+struct KnownInstance
+{
+	const char	*name;
+	const char	*owner_name;	// class-level label this instance's pins register under -- see owned_by()
+	uint8_t		pin[ 3 ];
+	uint8_t		pin_count;
+};
+
+const KnownInstance KNOWN_INSTANCES[]	=
+{
+	{ "Wire",    "GPIO",   { (uint8_t)I2C_SDA, (uint8_t)I2C_SCL, 0 }, 2 },
+	{ "Wire1",   "GPIO",   { (uint8_t)I3C_SDA, (uint8_t)I3C_SCL, 0 }, 2 },
+#if defined( FRDM_MCXN947 )
+	// A153 has no Wire2 at all: a single physical I2C peripheral, already
+	// spoken for by Wire, makes a genuinely independent third I2C bus
+	// impossible on that board.
+	{ "Wire2",   "GPIO",   { (uint8_t)arduino_pin_by_number[ MB_SDA ], (uint8_t)arduino_pin_by_number[ MB_SCL ], 0 }, 2 },
+#endif
+	{ "SPI",     "SPI",    { (uint8_t)arduino_pin_by_number[ ARD_MOSI ], (uint8_t)arduino_pin_by_number[ ARD_MISO ], (uint8_t)arduino_pin_by_number[ ARD_SCK ] }, 3 },
+	{ "SPI1",    "SPI",    { (uint8_t)arduino_pin_by_number[ MB_MOSI ], (uint8_t)arduino_pin_by_number[ MB_MISO ], (uint8_t)arduino_pin_by_number[ MB_SCK ] }, 3 },
+	{ "Serial",  "Serial", { (uint8_t)USBTX, (uint8_t)USBRX, 0 }, 2 },
+#if defined( FRDM_MCXA153 )
+	{ "Serial1", "Serial", { (uint8_t)arduino_pin_by_number[ D0 ], (uint8_t)arduino_pin_by_number[ D1 ], 0 }, 2 },
+#elif defined( FRDM_MCXN947 )
+	// On N947, Serial1 lives on the MikroBus header's MB_TX/MB_RX pins --
+	// the same two physical pins as Wire1's I3C_SDA/I3C_SCL. Serial always
+	// registers as owner_name "Serial" regardless of which pins (its own
+	// apply_pin_mux() calls pin_registry_note() directly, bypassing
+	// DigitalInOut -- unlike I2C/I3C's SDA/SCL, which is why Serial's pins
+	// never show a separate "GPIO" registration alongside "Serial" in the
+	// pin table above), so owned_by("Serial") still correctly tells this
+	// row apart from Wire1's ("GPIO") on the very same physical pins. The
+	// two can't really be begun at once (whichever muxes the pins last
+	// wins the physical bus) -- if both show up claimed simultaneously,
+	// owners_of()'s raw, name-agnostic count catches it as CONFLICT below.
+	{ "Serial1", "Serial", { (uint8_t)arduino_pin_by_number[ MB_TX ], (uint8_t)arduino_pin_by_number[ MB_RX ], 0 }, 2 },
+#endif
+};
 
 }	// namespace
 
@@ -197,7 +335,7 @@ void PinState::print( Print &out ) const
 
 		char	names_buf[ 40 ];
 		char	pin_buf[ 12 ];
-		char	owner_buf[ 24 ]	= "-";
+		char	owner_buf[ 24 ];
 
 		names_for( pin, names_buf, sizeof( names_buf ) );
 		pin_registry_pin_name( pin, pin_buf, sizeof( pin_buf ) );
@@ -206,33 +344,8 @@ void PinState::print( Print &out ) const
 		uint8_t		actual_mux	= pcr.mux;
 		bool		valid		= actual_mux != 0xFF;
 
-		int		owners			= 0;
 		uint8_t	single_wanted	= 0;
-		uint8_t	owner_pos		= 0;
-
-		for ( const Entry &e : registry )
-		{
-			if ( !e.in_use )
-				continue;
-
-			for ( uint8_t j = 0; j < e.count; j++ )
-			{
-				if ( e.pins[ j ] != pin )
-					continue;
-
-				int	n	= snprintf( owner_buf + owner_pos, sizeof( owner_buf ) - owner_pos, "%s%s", (owners > 0) ? ", " : "", e.name );
-
-				if ( n > 0 )
-					owner_pos	+= (uint8_t)n;
-
-				single_wanted	= e.wanted_mux;
-				owners++;
-				break;
-			}
-		}
-
-		if ( owners == 0 )
-			owner_buf[ 0 ]	= '-', owner_buf[ 1 ] = '\0';
+		int		owners			= owners_of( pin, owner_buf, sizeof( owner_buf ), &single_wanted );
 
 		const char	*status;
 
@@ -271,6 +384,63 @@ void PinState::print( Print &out ) const
 				names_buf, pin_buf, "-", "-", "-", "-", owner_buf, status );
 		}
 
+		out.println( line );
+	}
+
+	out.println();
+	out.println( "=== Peripheral instance state ===" );
+	out.println( "Instance     begun()?  Holds pins                       Status" );
+	out.println( "----------------------------------------------------------------------" );
+
+	for ( const KnownInstance &k : KNOWN_INSTANCES )
+	{
+		char	holds_buf[ 48 ];
+		uint8_t	pos			= 0;
+		uint8_t	held		= 0;
+		bool	conflict	= false;
+
+		holds_buf[ 0 ]	= '\0';
+
+		for ( uint8_t i = 0; i < k.pin_count; i++ )
+		{
+			char	owner_buf[ 24 ];
+			int		owners	= owners_of( k.pin[ i ], owner_buf, sizeof( owner_buf ), nullptr );
+
+			if ( owners > 1 )
+				conflict	= true;
+
+			if ( !owned_by( k.pin[ i ], k.owner_name ) )
+				continue;
+
+			char	pin_name[ 12 ];
+
+			held++;
+			pin_registry_pin_name( k.pin[ i ], pin_name, sizeof( pin_name ) );
+
+			int	n	= snprintf( holds_buf + pos, sizeof( holds_buf ) - pos, "%s%s", (pos > 0) ? ", " : "", pin_name );
+
+			if ( n > 0 )
+				pos	+= (uint8_t)n;
+		}
+
+		if ( 0 == pos )
+			snprintf( holds_buf, sizeof( holds_buf ), "-" );
+
+		const char	*begun_s	= (held == k.pin_count) ? "yes" : "no";
+		const char	*status;
+
+		if ( conflict )
+			status	= "CONFLICT";
+		else if ( 0 == held )
+			status	= "-";
+		else if ( held < k.pin_count )
+			status	= "PARTIAL";
+		else
+			status	= "OK";
+
+		char	line[ 90 ];
+
+		snprintf( line, sizeof( line ), "%-12s %-9s %-32s %s", k.name, begun_s, holds_buf, status );
 		out.println( line );
 	}
 }
