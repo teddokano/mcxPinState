@@ -60,10 +60,14 @@ maintenance.
 
 ## Status
 
-Functional, both ownership tracking (conflict detection) and the MUX
-expectation cross-check. Ownership tracking has been verified on real
-hardware (both FRDM-MCXA153 and FRDM-MCXN947), including a real false-
-positive it caught and mcx-arduino-core then fixed (SPI's internal CS
-bookkeeping object versus a sketch's own `pinMode(SS, ...)`). The MUX
-cross-check itself is compile-verified only so far -- not yet exercised
-on real hardware.
+Functional and verified on real hardware (both FRDM-MCXA153 and
+FRDM-MCXN947) -- both ownership tracking (conflict detection) and the MUX
+expectation cross-check. Development turned up two real bugs in
+mcx-arduino-core along the way, both fixed there:
+
+- A false-positive CONFLICT on SPI's CS pin (its internal bookkeeping
+  object versus a sketch's own `pinMode(SS, ...)`)
+- A false-positive MISMATCH on any pin a peripheral class re-muxes after
+  building it as a plain `DigitalInOut` first (e.g. I2C/I3C's SDA/SCL) --
+  `DigitalInOut::pin_mux()` wasn't keeping the registry's expectation in
+  sync with the ALT it had just set
