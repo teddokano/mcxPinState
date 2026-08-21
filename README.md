@@ -74,10 +74,10 @@ mcx-arduino-core along the way, both fixed there:
   building it as a plain `DigitalInOut` first (e.g. I2C/I3C's SDA/SCL) --
   `DigitalInOut::pin_mux()` wasn't keeping the registry's expectation in
   sync with the ALT it had just set
-
-The IBE/open-drain/pull-resistor reporting is compile-verified only so
-far -- not yet checked on real hardware. (While adding it,
-mcx-arduino-core's `PORT_SetPinPullUpDown()` turned out to have its own
-pre-existing bug -- its `enable`/`logic` parameters land in the PS/PE
-fields swapped from what its own doc comment says -- documented at the
-read site but not yet fixed.)
+- A real, pre-existing bug in `PORT_SetPinPullUpDown()`, found by adding
+  the IBE/open-drain/pull-resistor reporting and then confirming on real
+  hardware with `examples/PullModeCheck`: its `enable`/`logic` parameters
+  landed in the PS/PE fields swapped, which meant
+  `pinMode(pin, INPUT_PULLDOWN)` silently left the pin with no pull
+  enabled at all (`INPUT_PULLUP` happened to still work, since its
+  enable=1/logic=1 combination is symmetric either way round)
