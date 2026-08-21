@@ -11,6 +11,30 @@
 
 namespace {
 
+// The mcx-arduino-core release ALIAS_NAMES and KNOWN_INSTANCES (below)
+// were last hand-checked against, by reading arduino_io.h's own
+// arduino_pin_by_number[]/alias macros. Bump this -- after actually
+// re-checking both tables -- whenever mcx-arduino-core ships a release
+// newer than this.
+//
+// A #warning, not a #error: most mcx-arduino-core releases won't touch
+// pin naming at all, so a newer version alone isn't proof of drift --
+// this is a "go check" nudge for whoever's cutting a mcxPinState release
+// against a newer core, not a hard build break for every user who simply
+// upgraded mcx-arduino-core. The static_assert on ALIAS_NAMES' own length
+// (below) still catches the one kind of drift that would otherwise build
+// silently wrong: an alias actually added or removed.
+//
+// MCX_ARDUINO_CORE_VERSION itself is only defined from mcx-arduino-core
+// 0.4.0 onward (mcx_arduino_core_version.h) -- on an older core this
+// whole check is silently skipped, not an error, since there's nothing
+// to compare against.
+#define MCXPINSTATE_VERIFIED_AGAINST	MCX_ARDUINO_CORE_VERSION_VAL( 0, 4, 0 )
+
+#if defined( MCX_ARDUINO_CORE_VERSION ) && ( MCX_ARDUINO_CORE_VERSION > MCXPINSTATE_VERIFIED_AGAINST )
+#warning "mcxPinState's ALIAS_NAMES/KNOWN_INSTANCES (PinState.cpp) were last verified against an older mcx-arduino-core release than this build -- re-check them against the current arduino_io.h, then bump MCXPINSTATE_VERIFIED_AGAINST"
+#endif
+
 constexpr uint8_t	MAX_ENTRIES		= 32;
 constexpr uint8_t	MAX_PINS_EACH	= 4;
 

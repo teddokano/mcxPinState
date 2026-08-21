@@ -120,6 +120,26 @@ hardware testing showed `SPI` reporting PARTIAL just because
 same physical pin as `SPI`'s default SCLK, entirely unrelated to whether
 `SPI.begin()` was ever called.
 
+## Staying in sync with mcx-arduino-core
+
+`ALIAS_NAMES` and `KNOWN_INSTANCES` (`PinState.cpp`) are both
+hand-maintained against mcx-arduino-core's `arduino_io.h` -- their
+*values* come straight from mcx-arduino-core's own macros/arrays (so they
+can't drift), but the *set of names* is a manual copy that needs
+rechecking whenever mcx-arduino-core adds or removes a pin alias or a
+well-known global instance.
+
+`MCXPINSTATE_VERIFIED_AGAINST` (top of `PinState.cpp`) records which
+mcx-arduino-core release that check was last done against, using
+`MCX_ARDUINO_CORE_VERSION` (mcx-arduino-core 0.4.0+, this package's own
+release version -- unrelated to `ARDUINO`, the Arduino API level). If a
+build's mcx-arduino-core is newer than that, a `#warning` fires: not a
+hard build break (most mcx-arduino-core releases don't touch pin naming
+at all), just a nudge to go recheck both tables before trusting the
+build's pin table, then bump the constant. On an mcx-arduino-core older
+than 0.4.0 (`MCX_ARDUINO_CORE_VERSION` undefined) the check is silently
+skipped -- there's nothing to compare against.
+
 ## Status
 
 Functional and verified on real hardware (both FRDM-MCXA153 and
